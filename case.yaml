@@ -1,0 +1,13 @@
+name:
+cases: 
+  tf_first:
+    config:
+      days: [5, 22, 66, 252]
+  ff: {}
+  group_second: {}
+  when_third: {}
+  t_decay: 
+    s: 1
+    e: 11
+  t_truncation: {}
+  t_neutralization: {}

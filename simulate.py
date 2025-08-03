@@ -4,7 +4,7 @@ import json
 from requests.auth import HTTPBasicAuth
 import pandas as pd
 from time import sleep
-import time
+# import time
 import datetime
 import pytz
 # 加载凭据文件
@@ -33,7 +33,7 @@ class quant:
         response = self.sess.post('https://api.worldquantbrain.com/authentication')
         print(response)
 
-    def save_result(self, alpha_num, s_time) -> pd.DataFrame:
+    def get_result(self, alpha_num, s_time) -> pd.DataFrame:
         # 2025-07-04T22:52:30
         arr = []
         print(alpha_num, s_time)
@@ -228,6 +228,7 @@ def t_neutralization(df: pd.DataFrame, now:str=None) ->pd.DataFrame:
             settings["neutralization"]=neu
             arrs.append({"settings": settings, "code": df.loc[i]["code"]})
     return arrs
+
 def cases(func, df):
     def get_time():
         now = datetime.datetime.now(pytz.timezone('America/New_York'))
@@ -247,72 +248,46 @@ def cases(func, df):
     cfg.current = {}
     cfg.qua.save_status(index=0)
     return df
+def one_cases(func, df):
+    def get_time():
+        now = datetime.datetime.now(pytz.timezone('America/New_York'))
+        return now.isoformat().split(".")[0]
+    # 组装
+    arrs:pd.DataFrame = func(df)
+    # 设置状态
+    cfg.current["time"] = cfg.current.get("time", get_time())
+    cfg.current["func"] = func.__name__
+    cfg.status[func.__name__] = {}
+    log(cfg.status)
+    # 执行回测
+    cfg.qua.sims(arrs)
+    # 获取结果
+    df: pd.DataFrame = cfg.qua.get_result(len(arrs), cfg.current.get("time"))
+    cfg.qua.save_file = cfg.qua.data_name + f"-{func.__name__}.csv"
+    df = cfg.qua.deal_data(df, sharpe=cfg.sharpe,)
+    cfg.current["end_time"] = get_time()
+    cfg.status[func.__name__] = cfg.current
+    cfg.current = {}
+    cfg.qua.save_status(index=0)
+    return df
 def log(name,):
     logger = logging.getLogger(name)
     formater = logging.Formatter( "[%(asctime)s] %(message)s", '%Y-%m-%d %H:%M:%S' )
     logger.setLevel(logging.DEBUG)
-    # if not show:
     file_log = logging.FileHandler(name, )
     file_log.setFormatter(formater)
     logger.addHandler(file_log)
-    # 是否需要打印在屏幕上
-    # else:
     ch = logging.StreamHandler()
     ch.setFormatter(formater)
     logger.addHandler(ch)
     return logger
 class cfg:
+    data_name: str = ""
     qua: quant = None
     status = {}
     current = {}
     log = None
     max_post: int = 5
     sharpe = 0.8
-def flow(data_name, settings: dict= {}, region= "USA",universe="TOP3000", delay=0,neu="SUBINDUSTRY",start=0, end=99, sharpe=0.8 ):
-    cfg.qua = quant(data_name)
-    cfg.log = log(cfg.qua.log_name).info
-    if os.path.exists(cfg.qua.case_name):
-        with open(cfg.qua.case_name, "r") as f:
-            cfg.status = json.load(f)
-    if os.path.exists(cfg.qua.case_df):
-        df = pd.read_json(cfg.qua.case_df) 
-    else:
-        df = pd.read_csv(cfg.qua.data_name+".csv")
-        df["code"] = "  " + df["code"] + "  "
-        
-    if "settings" not in df.columns:
-        settings = {
-                    "instrumentType": "EQUITY",
-                    "region": region,
-                    "universe": universe,
-                    "delay": delay,
-                    "decay": 0,
-                    "neutralization": neu,
-                    "truncation": 0.08,
-                    "pasteurization": "ON",
-                    "unitHandling": "VERIFY",
-                    "nanHandling": "ON",
-                    "language": "FASTEXPR",
-                    "visualization": False }
-        df = df.to_dict() 
-        df["settings"] ={i:settings for i in list(df["code"].keys())}
-        df = pd.DataFrame(df)
-    print("status: ", cfg.status)
-    cfg.current = cfg.status.get("current",{})
-    cfg.qua.login()
-    funcs = [ff, ts_first, group_second, when_third, t_decay][start: end]
-    for i, func  in enumerate(funcs):
-        # 获取不到，或者获取到为当前值时进入
-        if not cfg.current.get("func") or cfg.current.get("func")== func.__name__:
-            cfg.sharpe = sharpe+0.15*i
-            df = cases(func, df)
-    df: pd.DataFrame = None
-    for i in os.listdir(cfg.qua.path):
-        if data_name +"-df"  in i:
-            continue
-        if data_name +"-" in i:
-            dft = pd.read_csv(cfg.qua.path+i)
-            df = pd.concat([df, dft])
-    df.to_csv(cfg.qua.data_name+"-all.csv")
+
      
-flow("news18-EUR-0-TOP2500-v", region="EUR", universe="TOP2500",delay=1, neu="FAST")
