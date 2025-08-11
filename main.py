@@ -1,7 +1,7 @@
 import os, json
 import pandas as pd
 from . import simulate
-from .simulate import cfg,flow, quant, log
+from .simulate import cfg, quant, log
 # simulate.flow()
 cfg.sharpe=0.8
 # class cfg:

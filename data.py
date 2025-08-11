@@ -86,7 +86,6 @@ def deal_data(df: pd.DataFrame,sharpe: float=0.9,n: int=1,
         return x.split("(")[0]
     def get_exp(x: str):
         return x.split("  ")[1] if "  " in x else x
-
     df = df[df["longCount"]+df["shortCount"]>20]
     df["total"] = abs(df["fitness"] + df["sharpe"])
     df["exp"] = df["code"].apply(lambda x: get_exp(x))
