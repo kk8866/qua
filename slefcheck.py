@@ -73,23 +73,30 @@ def _get_alpha_pnl(alpha_id: str) -> pd.DataFrame:
         Returns:
                 pd.DataFrame: 包含日期和对应 PnL 数据的 DataFrame，列名为 'Date' 和 alpha_id。
         """
+        save_path = cfg.data_path+f"pnls/{alpha_id}.pkl"
+        if os.path.exists(save_path):
+                return pd.read_pickle(save_path)
         pnl = wait_get("https://api.worldquantbrain.com/alphas/" + alpha_id + "/recordsets/pnl").json()
         df = pd.DataFrame(pnl['records'], columns=[item['name'] for item in pnl['schema']['properties']])
         df = df.rename(columns={'date':'Date', 'pnl':alpha_id})
         df = df[['Date', alpha_id]]
+        # 最后一个值为负时，反转pnls值
+        if df.loc[df.index[-1]][alpha_id] < 0:
+            df[alpha_id] = - df[alpha_id]
+        df.to_pickle(save_path)
         return df
 def get_alphas_pnl(alpha_ids):
     '''
     传入alpha-ids列表返回，list[df]
+    id对应的pnl列
     '''
     fetch_pnl_func = lambda alpha_id: _get_alpha_pnl(alpha_id).set_index('Date')
     with ThreadPoolExecutor(max_workers=10) as executor:
             results = executor.map(fetch_pnl_func, [item['id'] for item in alpha_ids])
-    # alpha_pnls = pd.concat([alpha_pnls] + list(results), axis=1)
-    # alpha_pnls.sort_index(inplace=True)
-    return alpha_ids, list(results)
+    alpha_pnls = pd.concat(list(results), axis=1)
+    alpha_pnls.sort_index(inplace=True)
+    return alpha_ids, alpha_pnls
 
-    pass
 def get_alpha_pnls(
         alphas: list[dict],
         alpha_pnls: Optional[pd.DataFrame] = None,
@@ -151,6 +158,60 @@ def get_os_alphas(limit: int = 100, get_first: bool = False) -> List[Dict]:
                 if get_first:
                         break
         return fetched_alphas[:total_alphas]
+
+
+def get_list(df: pd.DataFrame):
+        finally_alphas = []
+        def get_llll(df:pd.DataFrame, arr=[], father:list = []):
+                if len(arr)<=1:
+                        finally_alphas.append(father+arr)
+                        return None
+                # 选择时
+                father.append(arr[0])
+                get_llll(df,[i for i in arr[1:] if df.iloc[arr[0]][i]<0.7], father+arr[0])
+                # 不选择第一个
+                father.pop()
+                get_llll(df, arr[1:], father)
+        
+        alpha_ids = df.head(1).values.tolist()
+        # alpha_ids = df[df.columns[0]<0.7].index.tolist()
+        get_alpha_pnls(df, alpha_ids, [])
+        return finally_alphas
+        
+        
+
+def calc_all_corr(alpha_ids, sim_max: int = 0.7)->pd.DataFrame:
+        # 加载已os的pnls数据
+        os_alpha_ids, os_alpha_rets = load_data()
+        # 下载传入alpha_ids数据
+        alpha_results = []
+        for alpha_id in alpha_ids:
+                alpha_result = wait_get(f"https://api.worldquantbrain.com/alphas/{alpha_id}").json()
+                alpha_results.append(alpha_result)
+        _, is_pnls = get_alpha_pnls(alpha_results)
+        # 算出增量，后一行减前一行的值
+        is_rets = is_pnls - is_pnls.ffill().shift(1)
+        # 保留四年时间的增量pnls
+        is_rets = is_rets[pd.to_datetime(is_rets.index)>pd.to_datetime(is_rets.index).max() - pd.DateOffset(years=4)]
+        arr = []
+        # 求最大相关性，挑选出满足的alpha id
+        similar_l = {}
+        for alpha_id in alpha_ids:
+                print(print(os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets["alpha_id"]).sort_values(ascending=False).round(4)))
+                self_corr = os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets["alpha_id"]).max()
+                if self_corr < sim_max:
+                        arr.append(alpha_id)
+                        similar_l[alpha_id] = self_corr
+        # 计算满足条件的is数据的相关性
+        if not similar_l:
+                return None
+        df = is_rets[arr].corr()
+        for i in similar_l:
+                df.at[i, i] = similar_l[i]
+        print(df)
+        return df
+        
+        
 def calc_self_corr(
         alpha_id: str,
         os_alpha_rets: pd.DataFrame | None = None,
@@ -172,6 +233,7 @@ def calc_self_corr(
                 float | tuple[float, pd.DataFrame]: 如果 `return_alpha_pnls` 为 False，返回最大自相关性值；
                         如果 `return_alpha_pnls` 为 True，返回包含最大自相关性值和 alpha PnL 数据的元组。
         """
+        
         if alpha_result is None:
                 alpha_result = wait_get(f"https://api.worldquantbrain.com/alphas/{alpha_id}").json()
         if alpha_pnls is not None:
@@ -251,7 +313,7 @@ def load_data(tag=None):
 class cfg:
         data_path =  "/storage/emulated/0/qua/check/" \
         if sys.platform == "linux"\
-        else "C:\\Project\\qua\\submit\\"
+        else "C:\\Project\\qua\\check\\"
         with open(data_path + '../brain.txt') as f:
                username, password = json.load(f)
         sess = None
@@ -274,6 +336,7 @@ def check(alphas,):
             arr.append([alpha_id, similer])
             with open("1.txt", "a+") as f:
                 f.write(alpha_id+str(similer))
+            pnl.to_pickle(cfg.data_path+f"/pnls/{alpha_id}.pkl")
 
     
     cfg.sess.close()
