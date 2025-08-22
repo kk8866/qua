@@ -28,11 +28,11 @@ def sign_in(username, password):
                 logging.error(f"Login failed: {e}")
                 return None
 def save_obj(obj: object, name: str) -> None:
-    filename = os.path.join(cfg.data_path, name, '.pickle')
+    filename = os.path.join(cfg.data_path, name+ '.pickle')
     with open(filename, 'wb') as f:
         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
 def load_obj(name: str) -> pd.DataFrame:
-    filename = os.path.join(cfg.data_path, name, '.pickle')
+    filename = os.path.join(cfg.data_path, name+'.pickle')
     if os.path.exists(filename):
         with open(filename, 'rb') as f:
             return pickle.load(f)
@@ -161,6 +161,7 @@ def get_os_alphas(limit: int = 100, get_first: bool = False) -> List[Dict]:
 
 
 def get_list(df: pd.DataFrame):
+<<<<<<< HEAD
         finally_alphas = []
         def get_llll(df:pd.DataFrame, arr=[], father:list = []):
                 if len(arr)<=1:
@@ -180,6 +181,20 @@ def get_list(df: pd.DataFrame):
         
         
 
+=======
+    finally_alphas = []
+    def get_llll(df:pd.DataFrame, arr=[], father:list = []):
+            if len(arr)<=1:
+                finally_alphas.append(father+arr)
+                return None
+            # 选择第一个
+            get_llll(df,[i for i in arr[1:] if df.loc[arr[0]][i]<0.7], father+arr[:1])
+            # 不选择第一个
+            get_llll(df, arr[1:], father)
+    alpha_ids = df.columns.to_list()
+    get_llll(df, alpha_ids, [])
+    return finally_alphas
+>>>>>>> 48e5a5799f898fa3fca3807df40b21a54dc527c3
 def calc_all_corr(alpha_ids, sim_max: int = 0.7)->pd.DataFrame:
         # 加载已os的pnls数据
         os_alpha_ids, os_alpha_rets = load_data()
@@ -197,8 +212,13 @@ def calc_all_corr(alpha_ids, sim_max: int = 0.7)->pd.DataFrame:
         # 求最大相关性，挑选出满足的alpha id
         similar_l = {}
         for alpha_id in alpha_ids:
+<<<<<<< HEAD
                 print(print(os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets["alpha_id"]).sort_values(ascending=False).round(4)))
                 self_corr = os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets["alpha_id"]).max()
+=======
+                print(os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets[alpha_id]).sort_values(ascending=False).round(4))
+                self_corr = os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets[alpha_id]).max()
+>>>>>>> 48e5a5799f898fa3fca3807df40b21a54dc527c3
                 if self_corr < sim_max:
                         arr.append(alpha_id)
                         similar_l[alpha_id] = self_corr
@@ -317,6 +337,7 @@ class cfg:
         with open(data_path + '../brain.txt') as f:
                username, password = json.load(f)
         sess = None
+<<<<<<< HEAD
 def check(alphas,):
     cfg.sess = sign_in(cfg.username, cfg.password)
     download_data(flag_increment=True)
@@ -337,6 +358,12 @@ def check(alphas,):
             with open("1.txt", "a+") as f:
                 f.write(alpha_id+str(similer))
             pnl.to_pickle(cfg.data_path+f"/pnls/{alpha_id}.pkl")
+=======
+               
+cfg.sess = sign_in(cfg.username, cfg.password) 
+download_data(flag_increment=True)
+>>>>>>> 48e5a5799f898fa3fca3807df40b21a54dc527c3
 
-    
-    cfg.sess.close()
+df = calc_all_corr(["1RKjRZm","a8wWzEW", "Ro5ON1o","oXPbMrm","6QGLaXJ","Oj6jomv","PbPAamM","jJVOKjQ"])
+df.to_csv(cfg.data_path+"xxx.csv")
+print(get_list(df))

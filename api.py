@@ -6,7 +6,7 @@ from time import sleep
 from .config import cfg, save_status
 class quant:
     def __init__(self) -> None:
-        self.arr = []
+        self.arr = {}
         self.count = 0
         self.max_post = 2
         self.sess = requests.Session()
@@ -54,7 +54,29 @@ class quant:
                 del result["settings"]["endDate"]
                 arr.append(result)
         return pd.DataFrame(arr)
-
+    def get_results(self, alpha_num, s_time) -> pd.DataFrame:
+        '''传入获取的数量和开始的时间参数
+        返回df'''
+        # 2025-07-04T22:52:30
+        arr = []
+        print(alpha_num, s_time)
+        self.login()
+        for i in range(0, alpha_num+100, 100):
+            print(i)
+            url = "https://api.worldquantbrain.com/users/self/alphas?limit=100&offset=%d"%(i) \
+                    + "&status=UNSUBMITTED%1FIS_FAIL&dateCreated%3E=" + s_time  \
+                    + "-04:00"
+            print(url)
+            response = self.sess.get(url)
+            if response.status_code>205:
+                print(response.json())
+            alpha_list = response.json()["results"]
+            if len(alpha_list)==0:
+                return pd.DataFrame(arr)
+            for alpha in  alpha_list:
+                alpha["result"] =  False if [i for i in alpha if i.get("reult") == "FAIL"] else True
+            arr += alpha_list
+        return pd.DataFrame(arr)
     def submit_simulations(self, index,  alpha_list, max_post=3):
         if self.count % 80 == 0:
             self.sess.close()
@@ -63,37 +85,36 @@ class quant:
         if  alpha_list:
             print(alpha_list[0])
             for _ in range(30):
-                try:
-                    sim1 = None
-                    sim1 = self.sess.post('https://api.worldquantbrain.com/simulations', json=alpha_list,)
+                sim1 = None
+                sim1 = self.sess.post('https://api.worldquantbrain.com/simulations', json=alpha_list,)
+                if sim1.status_code <299:
                     location = sim1.headers['Location'].split("/")[-1]
+                    self.arr[index] = location
+                    save_status(index+1)
+                    print(index, location)
                     break
-                except  Exception as e:
-                    print(e, index, sim1)
-                    sleep(10)
-                    if _ == 29:
-                        cfg.log(f"post ERROR: {index}")
-                        return
-            self.arr.append((index, location))
-            save_status(index+1)
-        try:  
-            print(self.arr)
+                print(index, sim1.json())
+                location = sim1.headers['Location'].split("/")[-1]
+                sleep(10)
+                if _ == 29:
+                    cfg.log(f"post ERROR: {index}")
+                    return
+        try:
             while len(self.arr) >= max_post:
-                for index, ip in self.arr:
-                    url = "https://api.worldquantbrain.com/simulations/" + ip
+                for i in self.arr:
+                    url = "https://api.worldquantbrain.com/simulations/" + self.arr[i]
                     sim_progress_resp = self.sess.get(url)
                     retry_after_sec = sim_progress_resp.headers.get("Retry-After", 0)
                     if retry_after_sec == 0:  # simulation done!模拟完成!
-                        if (index, ip) in self.arr:
-                            self.arr.remove((index, ip)) #删除对应的值
+                        del self.arr[i]
+                        print("  ".join(self.arr.keys()))
                         children = sim_progress_resp.json().get("children")  # 获取alpha id
                         status1 = sim_progress_resp.json().get("status")
                         if status1 == "ERROR":
-                            cfg.log(f"status ERROR: {index} {ip}" )
-                        print(index, status1, children) 
-                        sleep(0.1)
-                    else:
-                        sleep(0.25)
+                            cfg.log(f"status ERROR: {i} {self.arr[i]}" )
+                        print(i, status1, children) 
+                        break
+                    sleep(0.25)
         except Exception as e:
             cfg.log(e)
             print(e)
@@ -102,8 +123,7 @@ class quant:
     def sims(self, df: pd.DataFrame, start: int=0):
         print(len(df.index)) 
         arr= []
-        start = cfg.status.get("case",0)
-        i = 0
+        start = cfg.status.get("case",-1)
         start+=1
         for i, index in enumerate(df.index[start:], start=start):
             alpha_s =  { 
@@ -115,4 +135,4 @@ class quant:
                 cfg.log(f"index is: {index}")
                 self.submit_simulations(index, arr, max_post=cfg.max_post)
                 arr = []
-        self.submit_simulations(i, [], max_post=1)
+        self.submit_simulations(len(df.index), [], max_post=1)

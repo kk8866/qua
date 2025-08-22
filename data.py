@@ -15,16 +15,20 @@ def ts_first(df: pd.DataFrame, days:list = [5, 22, 66, 252]) ->pd.DataFrame:
                 arr.append({"code": f'{op}({df.loc[i]["code"]}, {day})',
                  "settings": df.loc[i]["settings"]})
     return pd.DataFrame(arr)
-def group_second(df: pd.DataFrame, region=None):
-    groups=["group_rank", "group_zscore", "group_scale", "group_neutralize"]
-    gps = ["industry", "subindustry"]
+def group_second(df: pd.DataFrame,):
+    group_ops=["group_rank", "group_zscore", "group_scale", "group_neutralize"]
+    group_datas = ["industry", "subindustry", "exchange","market"]
     if df.loc[df.index[0], "settings"]["region"] in ["GLB", "EUR","ASI"]:
         gps += ["group_cartesian_product(country, industry)", 
     "group_cartesian_product(country, subindustry)"]
+    group_cartesian_product = [f"group_cartesian_product(country, {i})" for i in group_datas]
     arr = []
     for i in df.index:
-        for op in groups:
-            for gp in gps:
+        # 判断地区，是欧亚全球时，走国家联合
+        current_datas = group_datas + group_cartesian_product if \
+            df.loc[i]["settings"]["region"] in ["GLB", "EUR","ASI"] else group_datas
+        for op in group_ops:
+            for gp in current_datas:
                 arr.append({"code": f'{op}({df.loc[i]["code"]}, {gp})',
                  "settings": df.loc[i]["settings"]})
     return pd.DataFrame(arr)
@@ -68,6 +72,8 @@ def t_truncation(df: pd.DataFrame, s=0, e=10) ->pd.DataFrame:
 def t_neutralization(df: pd.DataFrame, now:str=None) ->pd.DataFrame:
     arrs = []
     neus=["SUBINDUSTRY", "INDUSTRY", "RAM", "STATISTICAL", "CROWDING", "FAST", "SLOW", "MARKET", "SECTOR", "SLOW_AND_FAST",]
+    fast = ["SUBINDUSTRY", "INDUSTRY", "MARKET", "SECTOR"]
+    slow = ["STATISTICAL", "CROWDING", "FAST", "SLOW","SLOW_AND_FAST"] 
     neus = [i for i in neus if i != now]
     for i in  df.index:
         for neu in neus:
@@ -79,6 +85,7 @@ def deal_data(df: pd.DataFrame,sharpe: float=0.9,n: int=1,
     save_file:str="", case_df: str="") ->pd.DataFrame:
     # 变更sharpe和fitness，按照原始表达式分组。按照fitness+sharpe排序取前n。
     def op(x: str):
+        # 存在？ 代表三阶
         if "?" in x:
             x = x.split("?")[1:]
         elif x.startswith("group_"):
@@ -86,17 +93,22 @@ def deal_data(df: pd.DataFrame,sharpe: float=0.9,n: int=1,
         return x.split("(")[0]
     def get_exp(x: str):
         return x.split("  ")[1] if "  " in x else x
-    df = df[df["longCount"]+df["shortCount"]>20]
+    # df["result"] = df["checks"].apply(lambda x:  False if [i for i in x if i.get("reult") == "FAIL"] else True)
     df["total"] = abs(df["fitness"] + df["sharpe"])
     df["exp"] = df["code"].apply(lambda x: get_exp(x))
     df["op"] = df["code"].apply(lambda x: op(x))
     df.sort_values(by="total", inplace=True,ascending=False)
-    df.to_csv(save_file +".csv")
+    df.to_csv(save_file)
+    # 移除带\n表示网页端测试
+    df = df["\n" not in  df["code"]]
+    df["code"].isin
+    # long+short<20的不考虑
+    df = df[df["longCount"]+df["shortCount"]>20]
     df = df[(abs(df["sharpe"])>=sharpe) | (abs(df["fitness"]) >= 1)]
     df = df.groupby(["exp", "op"]).head(n)
     df.reset_index(drop=True, inplace=True)
     for a in df.index:
         if df.loc[a]["sharpe"] <0:
-            df.iat[a,"code"] = "-"+df.loc[a]["code"]
+            df.iat[a,"code"] = " -"+df.loc[a]["code"]
     df.to_json(case_df)
     return df

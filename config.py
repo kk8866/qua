@@ -1,7 +1,12 @@
 
 import sys, json, yaml
-with open('./case.yml', 'r', encoding='utf-8') as f:
+with open('./case.yaml', 'r', encoding='utf-8') as f:
         yldata = yaml.load(f.read(), Loader=yaml.FullLoader)
+        cases = {i :cas for i, cas in enumerate(yldata["cases"])}
+        yldata["cases"] = cases
+class currend:
+        
+        
 class cfg:
     data_name: str = yldata.get("name")
     path: str = "/storage/emulated/0/qua/" if sys.platform == "linux"\
@@ -25,3 +30,14 @@ def save_status(self, index):
     cfg.log(str(cfg.status))
     with open(cfg.case_name, "w") as f:
         f.write(json.dumps(cfg.status))
+# print(yldata["cases"])
+class paras:
+        type: str
+        settings: str
+class cases:
+        name: str
+        config: dict
+class yamldata:
+        name: str
+        para: paras
+        cases: dict

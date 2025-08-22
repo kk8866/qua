@@ -1,13 +1,36 @@
 name:
+para:
+  type: regular 
+  settings:
+    "instrumentType": "EQUITY"
+    "region": region
+    "universe": universe
+    "delay": delay
+    "decay": 0
+    "neutralization": neu
+    "truncation": 0.08
+    "pasteurization": "ON"
+    "unitHandling": "VERIFY"
+    "nanHandling": "ON"
+    "language": "FASTEXPR"
+    "maxTrade": ON
+    "visualization": False
 cases: 
-  - tf_first:
-    # config:
-    #   days: [5, 22, 66, 252]
-  - ff: {}
-  - group_second: {}
-  - when_third: {}
-  - t_decay: 
-    # s: 1
-    # e: 11
-  - t_truncation: {}
-  - t_neutralization: {}
+  - name: tf_first
+    para:
+      days: [5, 22, 66, 252]
+  - name:  ff
+    para:
+      sharpe: 0.7
+  - name: group_second
+    para:
+      sharpe: 0.85
+  - name: when_third
+    para:
+      sharpe: 0.9
+  - name: t_decay
+    para:
+      # s: 1
+      # e: 11
+  - name: t_truncation
+  - name: t_neutralization
