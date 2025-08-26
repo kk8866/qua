@@ -3,7 +3,9 @@ import json
 from requests.auth import HTTPBasicAuth
 import pandas as pd
 from time import sleep
-from .config import cfg, save_status
+from config import cfg, save_status, status
+from log import log
+from config import yamldata
 class quant:
     def __init__(self) -> None:
         self.arr = {}
@@ -38,20 +40,34 @@ class quant:
             for alphas_p in alpha_list:
                 result = dict()
                 result["id"] = alphas_p["id"]
+                if "regular" not in result["code"]:
+                    continue
+                # 获取表达式
                 result["code"] = alphas_p["regular"]["code"]
+                # 检查checks中是否有fail
                 result["result"] = "FAIL" if  [i.get("name") for i in alphas_p["is"]["checks"] if i.get("result") == "FAIL"] else "PASS"
-                LOW_SUB_UNIVERSE_SHARPE = [i for i in alphas_p["is"]["checks"] if i["name"] == "LOW_SUB_UNIVERSE_SHARPE"][0]
-                result["sub"]=LOW_SUB_UNIVERSE_SHARPE.get("value", -2)-LOW_SUB_UNIVERSE_SHARPE.get("limit", 2)
-                CONCENTRATED_WEIGHT: dict = [i for i in alphas_p["is"]["checks"] if i["name"] == "CONCENTRATED_WEIGHT"][0]
-                result["weight"] = CONCENTRATED_WEIGHT.get("limit", 0) - CONCENTRATED_WEIGHT.get("value", 0)
-                aplha_is:dict = alphas_p["is"]
-                delete =  ["startDate", "checks", "bookSize"]
-                for ite in delete:
-                    del aplha_is[ite] 
-                result.update(aplha_is)
+                # is中单keys数据类型的值直接保留
+                result.update({i:alpha_is[i] for i in alpha_is if isinstance(alpha_is[i], (float, str, int))})
+                # 保存checks中的详细数据
+                no_check = ["LOW_SHARPE", "LOW_FITNESS", "HIGH_TURNOVER", "LOW_TURNOVER"]
+                checks = {i["name"]: i.get("value") - i.get("limit") for i in alphas_p["is"]["checks"]\
+                        if ("limit" in i and i.get("name") not in no_check) }
+                # 暂定2y sharpe保留为原始值
+                result["LOW_2Y_SHARPE"] = [i.get("value") for i in alphas_p["is"]["checks"] if i.get("name")=="LOW_2Y_SHARPE"][0]
+                result.update(checks)
+                alpha_is:dict[str, dict] = alphas_p["is"]
+                # 保存其他项的sharpe和fitness
+                _fit = {i+"_fitness": alpha_is[i].get("fitness") for i in alpha_is if isinstance(alpha_is[i], dict)}
+                _sharpe = {i+"_sharpe": alpha_is[i].get("fitness") for i in alpha_is if isinstance(alpha_is[i], dict)}
+                result.update(_fit)
+                result.update(_sharpe)
+                result.update(alphas_p["settings"])
                 result["settings"] = alphas_p["settings"]
+                # 删除settings中不需要的字段
                 del result["settings"]["startDate"]
                 del result["settings"]["endDate"]
+                result["dateCreated"] = alphas_p["dateCreated"]
+                result["margin"] = result["margin"]*1e4
                 arr.append(result)
         return pd.DataFrame(arr)
     def get_results(self, alpha_num, s_time) -> pd.DataFrame:
@@ -123,16 +139,16 @@ class quant:
     def sims(self, df: pd.DataFrame, start: int=0):
         print(len(df.index)) 
         arr= []
-        start = cfg.status.get("case",-1)
+        start = status.current.case
         start+=1
         for i, index in enumerate(df.index[start:], start=start):
             alpha_s =  { 
-                "type": "REGULAR",
-                "settings": df.loc[index]["settings"],
+                "type": yamldata.type,
+                "settings": df.loc[index]["settings"]  if "settings" in df.columns else yamldata.settings,
                 "regular": df.loc[index]["code"] }
             arr.append(alpha_s)
-            if len(arr) == 10 or i>=len(df.index)-1:
-                cfg.log(f"index is: {index}")
+            if len(arr) == yamldata.one_slot_number or i>=len(df.index)-1:
+                log(f"index is: {index}")
                 self.submit_simulations(index, arr, max_post=cfg.max_post)
                 arr = []
         self.submit_simulations(len(df.index), [], max_post=1)

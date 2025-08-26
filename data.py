@@ -100,8 +100,7 @@ def deal_data(df: pd.DataFrame,sharpe: float=0.9,n: int=1,
     df.sort_values(by="total", inplace=True,ascending=False)
     df.to_csv(save_file)
     # 移除带\n表示网页端测试
-    df = df["\n" not in  df["code"]]
-    df["code"].isin
+    df = df[df["code"].apply(lambda x: "\n" not in x)]
     # long+short<20的不考虑
     df = df[df["longCount"]+df["shortCount"]>20]
     df = df[(abs(df["sharpe"])>=sharpe) | (abs(df["fitness"]) >= 1)]
@@ -112,3 +111,6 @@ def deal_data(df: pd.DataFrame,sharpe: float=0.9,n: int=1,
             df.iat[a,"code"] = " -"+df.loc[a]["code"]
     df.to_json(case_df)
     return df
+def Processing_results():
+    
+    pass
