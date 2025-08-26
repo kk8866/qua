@@ -10,7 +10,7 @@ from typing import Union, List, Tuple
 from concurrent.futures import ThreadPoolExecutor
 import pickle
 from collections import defaultdict
-import numpy as np
+import datetime
 # from tqdm import tqdm
 from pathlib import Path
 import sys
@@ -76,6 +76,7 @@ def _get_alpha_pnl(alpha_id: str) -> pd.DataFrame:
         save_path = cfg.data_path+f"pnls/{alpha_id}.pkl"
         if os.path.exists(save_path):
                 return pd.read_pickle(save_path)
+        print(f"开始下载:{alpha_id}")
         pnl = wait_get("https://api.worldquantbrain.com/alphas/" + alpha_id + "/recordsets/pnl").json()
         df = pd.DataFrame(pnl['records'], columns=[item['name'] for item in pnl['schema']['properties']])
         df = df.rename(columns={'date':'Date', 'pnl':alpha_id})
@@ -161,27 +162,6 @@ def get_os_alphas(limit: int = 100, get_first: bool = False) -> List[Dict]:
 
 
 def get_list(df: pd.DataFrame):
-<<<<<<< HEAD
-        finally_alphas = []
-        def get_llll(df:pd.DataFrame, arr=[], father:list = []):
-                if len(arr)<=1:
-                        finally_alphas.append(father+arr)
-                        return None
-                # 选择时
-                father.append(arr[0])
-                get_llll(df,[i for i in arr[1:] if df.iloc[arr[0]][i]<0.7], father+arr[0])
-                # 不选择第一个
-                father.pop()
-                get_llll(df, arr[1:], father)
-        
-        alpha_ids = df.head(1).values.tolist()
-        # alpha_ids = df[df.columns[0]<0.7].index.tolist()
-        get_alpha_pnls(df, alpha_ids, [])
-        return finally_alphas
-        
-        
-
-=======
     finally_alphas = []
     def get_llll(df:pd.DataFrame, arr=[], father:list = []):
             if len(arr)<=1:
@@ -194,15 +174,21 @@ def get_list(df: pd.DataFrame):
     alpha_ids = df.columns.to_list()
     get_llll(df, alpha_ids, [])
     return finally_alphas
->>>>>>> 48e5a5799f898fa3fca3807df40b21a54dc527c3
 def calc_all_corr(alpha_ids, sim_max: int = 0.7)->pd.DataFrame:
         # 加载已os的pnls数据
         os_alpha_ids, os_alpha_rets = load_data()
         # 下载传入alpha_ids数据
+        print("开始获取aplha字段信息")
         alpha_results = []
-        for alpha_id in alpha_ids:
-                alpha_result = wait_get(f"https://api.worldquantbrain.com/alphas/{alpha_id}").json()
-                alpha_results.append(alpha_result)
+        alpha_res_func = lambda alpha_id: wait_get(f"https://api.worldquantbrain.com/alphas/{alpha_id}").json()
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            alpha_results = executor.map(alpha_res_func, alpha_ids)
+        # for alpha_id in alpha_ids:
+        #     print(alpha_id)
+        #     alpha_result = wait_get(f"https://api.worldquantbrain.com/alphas/{alpha_id}").json()
+        #     alpha_results.append(alpha_result)
+        # print("开始读取os is数据")
+        alpha_results = list(alpha_results)
         _, is_pnls = get_alpha_pnls(alpha_results)
         # 算出增量，后一行减前一行的值
         is_rets = is_pnls - is_pnls.ffill().shift(1)
@@ -211,70 +197,36 @@ def calc_all_corr(alpha_ids, sim_max: int = 0.7)->pd.DataFrame:
         arr = []
         # 求最大相关性，挑选出满足的alpha id
         similar_l = {}
+        col = is_rets.columns
+        print(col)
+        print(is_rets)
         for alpha_id in alpha_ids:
-<<<<<<< HEAD
-                print(print(os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets["alpha_id"]).sort_values(ascending=False).round(4)))
-                self_corr = os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets["alpha_id"]).max()
-=======
-                print(os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets[alpha_id]).sort_values(ascending=False).round(4))
-                self_corr = os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(is_rets[alpha_id]).max()
->>>>>>> 48e5a5799f898fa3fca3807df40b21a54dc527c3
-                if self_corr < sim_max:
-                        arr.append(alpha_id)
-                        similar_l[alpha_id] = self_corr
+            if alpha_id not in col:
+                continue
+            # print(alpha_id)
+                # print(os_alpha_rets[os_alpha_ids[alpha_results[0]['settings']['region']]].corrwith(is_rets[alpha_id]).sort_values(ascending=False).round(4).head(2))
+            self_corr = os_alpha_rets[os_alpha_ids[alpha_results[0]['settings']['region']]]\
+                .corrwith(is_rets[alpha_id]).max()
+            if self_corr < sim_max:
+                    arr.append(alpha_id)
+                    similar_l[alpha_id] = self_corr
+            print(alpha_id, self_corr)
         # 计算满足条件的is数据的相关性
         if not similar_l:
                 return None
+        # 按照自相关系数排序
+        # # similar_l = sorted(similar_l.items(), key=lambda x: x[1])
+        # arr = [i for i in similar_l]
+        # arr = 
+        
         df = is_rets[arr].corr()
-        for i in similar_l:
-                df.at[i, i] = similar_l[i]
+        df["selfcheck"] = list(similar_l.values())
+        # 将对角线设置为与os的相关性
+        # for i in similar_l:
+        #         df.at[i, i] = similar_l[i]
         print(df)
         return df
         
-        
-def calc_self_corr(
-        alpha_id: str,
-        os_alpha_rets: pd.DataFrame | None = None,
-        os_alpha_ids: dict[str, str] | None = None,
-        alpha_result: dict | None = None,
-        return_alpha_pnls: bool = False,
-        alpha_pnls: pd.DataFrame | None = None
-) -> float | tuple[float, pd.DataFrame]:
-        """
-        计算指定 alpha 与其他 alpha 的最大自相关性。
-        Args:
-                alpha_id (str): 目标 alpha 的唯一标识符。
-                os_alpha_rets (pd.DataFrame | None, optional): 其他 alpha 的收益率数据，默认为 None。
-                os_alpha_ids (dict[str, str] | None, optional): 其他 alpha 的标识符映射，默认为 None。
-                alpha_result (dict | None, optional): 目标 alpha 的详细信息，默认为 None。
-                return_alpha_pnls (bool, optional): 是否返回 alpha 的 PnL 数据，默认为 False。
-                alpha_pnls (pd.DataFrame | None, optional): 目标 alpha 的 PnL 数据，默认为 None。
-        Returns:
-                float | tuple[float, pd.DataFrame]: 如果 `return_alpha_pnls` 为 False，返回最大自相关性值；
-                        如果 `return_alpha_pnls` 为 True，返回包含最大自相关性值和 alpha PnL 数据的元组。
-        """
-        
-        if alpha_result is None:
-                alpha_result = wait_get(f"https://api.worldquantbrain.com/alphas/{alpha_id}").json()
-        if alpha_pnls is not None:
-                if len(alpha_pnls) == 0:
-                        alpha_pnls = None
-        if alpha_pnls is None:
-                _, alpha_pnls = get_alpha_pnls([alpha_result])
-                alpha_pnls = alpha_pnls[alpha_id]
-        alpha_rets = alpha_pnls - alpha_pnls.ffill().shift(1)
-        alpha_rets = alpha_rets[pd.to_datetime(alpha_rets.index)>pd.to_datetime(alpha_rets.index).max() - pd.DateOffset(years=4)]
-        # os_alpha_rets = os_alpha_rets.replace(0, np.nan)
-        # alpha_rets = alpha_rets.replace(0, np.nan)
-        # print(os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(alpha_rets).sort_values(ascending=False).round(4))
-        os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(alpha_rets).sort_values(ascending=False).round(4).to_csv(str(cfg.data_path  +    'os_alpha_corr.csv'))
-        self_corr = os_alpha_rets[os_alpha_ids[alpha_result['settings']['region']]].corrwith(alpha_rets).max()
-        if np.isnan(self_corr):
-                self_corr = 0
-        if return_alpha_pnls:
-                return self_corr, alpha_pnls
-        else:
-                return self_corr
 def download_data(flag_increment=True):
         """
         下载数据并保存到指定路径。
@@ -301,11 +253,11 @@ def download_data(flag_increment=True):
         ppac_alpha_ids += [item['id'] for item in alphas for item_match in item['classifications'] if item_match['name'] == 'Power Pool Alpha']
 
         os_alpha_ids, os_alpha_pnls = get_alpha_pnls(alphas, alpha_pnls=os_alpha_pnls, alpha_ids=os_alpha_ids)
-        
         save_obj(os_alpha_ids, 'os_alpha_ids')
         save_obj(os_alpha_pnls,'os_alpha_pnls')
         save_obj(ppac_alpha_ids, 'ppac_alpha_ids')
         print(f'新下载的alpha数量: {len(alphas)}, 目前总共alpha数量: {os_alpha_pnls.shape[1]}')
+        return os_alpha_ids, os_alpha_pnls, ppac_alpha_ids
 def load_data(tag=None):
         """
         加载数据。
@@ -313,9 +265,10 @@ def load_data(tag=None):
         Args:
                 tag (str): 数据标记，默认为 None。
         """
-        os_alpha_ids = load_obj('os_alpha_ids')
-        os_alpha_pnls = load_obj('os_alpha_pnls')
-        ppac_alpha_ids = load_obj('ppac_alpha_ids')
+        # os_alpha_ids = load_obj('os_alpha_ids')
+        # os_alpha_pnls = load_obj('os_alpha_pnls')
+        # ppac_alpha_ids = load_obj('ppac_alpha_ids')
+        os_alpha_ids, os_alpha_pnls, ppac_alpha_ids =download_data()
         if tag=='PPAC':
                 for item in os_alpha_ids:
                         os_alpha_ids[item] = [alpha for alpha in os_alpha_ids[item] if alpha in ppac_alpha_ids]
@@ -337,33 +290,27 @@ class cfg:
         with open(data_path + '../brain.txt') as f:
                username, password = json.load(f)
         sess = None
-<<<<<<< HEAD
-def check(alphas,):
-    cfg.sess = sign_in(cfg.username, cfg.password)
-    download_data(flag_increment=True)
-    os_alpha_ids, os_alpha_rets = load_data()
-    arr = []
-    for i, alpha_id in enumerate(alphas):
-        print(i)
-        similer, pnl =  calc_self_corr(
-            alpha_id=alpha_id,
-            os_alpha_rets=os_alpha_rets,
-            os_alpha_ids=os_alpha_ids,
-            return_alpha_pnls=True
-        )
-        similer = float(similer)
-        print(alpha_id,similer)
-        if similer <0.7:
-            arr.append([alpha_id, similer])
-            with open("1.txt", "a+") as f:
-                f.write(alpha_id+str(similer))
-            pnl.to_pickle(cfg.data_path+f"/pnls/{alpha_id}.pkl")
-=======
                
-cfg.sess = sign_in(cfg.username, cfg.password) 
-download_data(flag_increment=True)
->>>>>>> 48e5a5799f898fa3fca3807df40b21a54dc527c3
 
-df = calc_all_corr(["1RKjRZm","a8wWzEW", "Ro5ON1o","oXPbMrm","6QGLaXJ","Oj6jomv","PbPAamM","jJVOKjQ"])
-df.to_csv(cfg.data_path+"xxx.csv")
-print(get_list(df))
+# download_data(flag_increment=True)
+# RwLlaw0
+alphas = ["XAwb8vX","ZvwAgbY","pegxKwX","1Avq0Ym","vo7N8KG","3vww68N","YoLozz6","Ojl8Jgv","GNZRzjO","lYPmrKx","a8wWzEW", "Ro5ON1o","oXPbMrm","6QGLaXJ","Oj6jomv","PbPAamM","jJVOKjQ"]
+data_name = "model110-GLB-DIV3000-1-div-group_second.csv.csv"
+path = f"C:\\Project\\qua\\{data_name.split('-')[0]}\\"
+alphas = pd.read_csv(path+data_name)
+# # # alphas = alphas[(alphas["fitness"]<11) & (alphas["fitness"]>=5)]
+# alphas = alphas[alphas["fitness"] >= 1]
+alphas = alphas[alphas["result"] == "PASS"]
+# alphas = alphas[alphas["weight"] >= -0.05]
+alphas.sort_values("fitness", ascending=False, inplace=True)
+print(alphas.shape)
+alphas = alphas["id"].values.tolist()[:100]
+# exit()
+cfg.sess = sign_in(cfg.username, cfg.password) 
+# 
+# alphas = ["3vK9gZz"]
+df = calc_all_corr(alphas, sim_max=0.7)
+now = datetime.datetime.now()
+formatted_date = now.strftime("%Y%m%d-%H%M%S")
+df.to_csv(cfg.data_path+f"{formatted_date}-check.csv")
+# df.drop("selfcheck", axis=1, inplace=True)
