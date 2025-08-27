@@ -45,17 +45,18 @@ class quant:
                 # 获取表达式
                 result["code"] = alphas_p["regular"]["code"]
                 # 检查checks中是否有fail
-                result["result"] = "FAIL" if  [i.get("name") for i in alphas_p["is"]["checks"] if i.get("result") == "FAIL"] else "PASS"
+                result["result"] = False if  [i.get("name") for i in alphas_p["is"]["checks"] if i.get("result") == "FAIL"] else True
                 # is中单keys数据类型的值直接保留
+                alpha_is:dict[str, dict] = alphas_p["is"]
                 result.update({i:alpha_is[i] for i in alpha_is if isinstance(alpha_is[i], (float, str, int))})
                 # 保存checks中的详细数据
                 no_check = ["LOW_SHARPE", "LOW_FITNESS", "HIGH_TURNOVER", "LOW_TURNOVER"]
-                checks = {i["name"]: i.get("value") - i.get("limit") for i in alphas_p["is"]["checks"]\
+                checks = {i["name"]: round(i.get("value") - i.get("limit"), 4) for i in alphas_p["is"]["checks"]\
                         if ("limit" in i and i.get("name") not in no_check) }
                 # 暂定2y sharpe保留为原始值
                 result["LOW_2Y_SHARPE"] = [i.get("value") for i in alphas_p["is"]["checks"] if i.get("name")=="LOW_2Y_SHARPE"][0]
                 result.update(checks)
-                alpha_is:dict[str, dict] = alphas_p["is"]
+                
                 # 保存其他项的sharpe和fitness
                 _fit = {i+"_fitness": alpha_is[i].get("fitness") for i in alpha_is if isinstance(alpha_is[i], dict)}
                 _sharpe = {i+"_sharpe": alpha_is[i].get("fitness") for i in alpha_is if isinstance(alpha_is[i], dict)}
